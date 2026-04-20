@@ -139,8 +139,11 @@
         });
 
         const tulip = new THREE.Points(geometry, material);
-        // Base position un poco más abajo para compensar la pantalla del móvil
-        const baseOffsetY = -8; 
+        
+        // --- CAMBIO AQUÍ ---
+        // Base position ajustada para estar más arriba (antes -8, ahora -2)
+        const baseOffsetY = -2; 
+        
         tulip.position.y = baseOffsetY;
         scene.add(tulip);
 
@@ -154,7 +157,7 @@
             currentY: baseOffsetY,
             currentRotX: 0,
             
-            // Límites para que no se desborde
+            // Límites de movimiento
             maxMoveX: 12,
             maxMoveY: 15,
             maxRotX: 0.6 // Radianes máximos de rotación en X
