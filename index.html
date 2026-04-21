@@ -7,39 +7,55 @@
     <style>
         body { margin: 0; overflow: hidden; background-color: #050005; touch-action: none; font-family: 'Consolas', monospace; color: #fff; }
         
-        /* Lienzo WebGL principal */
         canvas { 
             display: block; width: 100vw; height: 100vh; 
             position: absolute; top: 0; left: 0; 
             z-index: 10;
         }
 
-        /* Contenedor de la imagen HTML (Regalo) */
+        /* --- SISTEMA DE DESCARGA --- */
+        #download-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #050005; display: none; flex-direction: column; align-items: center; justify-content: center;
+            z-index: 500; text-align: center; padding: 20px; box-sizing: border-box;
+        }
+        #download-overlay h2 { color: #ff96c8; font-size: 1.2rem; letter-spacing: 2px; margin-bottom: 15px;}
+        #download-overlay p { color: rgba(255,255,255,0.7); font-size: 0.9rem; margin-bottom: 30px; line-height: 1.5; max-width: 80%;}
+        #btn-descargar {
+            padding: 12px 30px; background: rgba(255,150,200,0.1); border: 1px solid #ff96c8; color: #ff96c8;
+            border-radius: 25px; font-size: 0.9rem; letter-spacing: 1px; cursor: pointer; transition: background 0.3s;
+        }
+        #btn-descargar:active { background: rgba(255,150,200,0.3); }
+        #download-status { margin-top: 20px; font-size: 0.8rem; color: #fff0a0; }
+
+        /* --- OVERLAY DE IMAGEN (REGALO) --- */
         #revelado-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; /* Fondo negro puro detrás de la imagen */
+            background: #000; 
             display: flex; flex-direction: column; align-items: center; justify-content: center;
-            z-index: 100; /* Capa intermedia */
-            opacity: 0; pointer-events: none; transition: opacity 2s ease-out;
+            z-index: 100; opacity: 0; pointer-events: none; transition: opacity 2s ease-out;
         }
         #revelado-overlay.show { opacity: 1; pointer-events: auto; }
-        
-        /* La imagen de tu repositorio */
         #imagen-local {
             max-width: 80%; max-height: 70vh;
             border: 1px solid rgba(255, 150, 200, 0.2); border-radius: 8px;
             object-fit: contain; box-shadow: 0 0 30px rgba(255,150,200,0.1);
         }
-        
         #close-btn {
             margin-top: 30px; padding: 10px 25px;
             background: transparent; border: 1px solid rgba(255,150,200,0.5); color: #ff96c8;
             border-radius: 20px; font-size: 0.8rem; letter-spacing: 1px; cursor: pointer;
         }
     </style>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 </head>
 <body>
+
+    <div id="download-overlay">
+        <h2>RECURSOS NECESARIOS</h2>
+        <p>El motor gráfico no se encuentra en la memoria. ¿Deseas descargarlo ahora? (Solo consumirá internet esta vez, luego será 100% offline).</p>
+        <button id="btn-descargar" onclick="descargarMotor()">Descargar y Guardar</button>
+        <div id="download-status"></div>
+    </div>
 
     <div id="revelado-overlay">
         <img id="imagen-local" src="imagen.jpg" alt="Regalo">
@@ -47,256 +63,257 @@
     </div>
 
     <script id="vertexShader" type="x-shader/x-vertex">
-        attribute float aSize;
-        attribute float aPhase; 
-        varying vec3 vPos;
-        uniform float uTime;
-        uniform float uOpacity; 
-
+        attribute float aSize; attribute float aPhase; varying vec3 vPos; uniform float uTime; uniform float uOpacity; 
         void main() {
             vec3 pos = position;
-            // Movimiento orgánico sutil basado en tiempo y fase única
-            vec3 beeMotion = vec3(
-                sin(uTime * 2.0 + aPhase * 10.0),
-                cos(uTime * 2.5 + aPhase * 12.0),
-                sin(uTime * 1.8 + aPhase * 8.0)
-            ) * aSize * 0.5;
+            vec3 beeMotion = vec3(sin(uTime * 2.0 + aPhase * 10.0), cos(uTime * 2.5 + aPhase * 12.0), sin(uTime * 1.8 + aPhase * 8.0)) * aSize * 0.5;
             pos += beeMotion;
-
             vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
             gl_Position = projectionMatrix * mvPosition;
             gl_PointSize = (4.0 * aSize) * (50.0 / -mvPosition.z);
             vPos = position; 
         }
     </script>
-
     <script id="fragmentShader" type="x-shader/x-fragment">
-        varying vec3 vPos;
-        uniform float uOpacity; 
-
+        varying vec3 vPos; uniform float uOpacity; 
         void main() {
-            vec2 coord = gl_PointCoord - vec2(0.5);
-            if(length(coord) > 0.5) discard; 
+            vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; 
             vec3 color;
-            // Coloreado basado en posición 3D (Tallo vs Pétalos)
-            if (vPos.y < 0.0 && length(vPos.xz) < 5.0) {
-                color = vec3(0.2, 0.8, 0.3); // Tallo verde
-            } else if (vPos.y >= 0.0 && vPos.y <= 18.0 && length(vPos.xz) < 15.0) {
-                float h = vPos.y / 18.0; 
-                color = mix(vec3(1.0, 0.1, 0.4), vec3(1.0, 0.6, 0.8), h); // Pétalos rosa/magenta
-            } else {
-                color = vec3(1.0, 0.9, 0.7); // Halo amarillo pálido
-            }
-            float strength = pow(1.0 - (length(coord) * 2.0), 1.5);
-            gl_FragColor = vec4(color, strength * 0.85 * uOpacity);
+            if (vPos.y < 0.0 && length(vPos.xz) < 5.0) color = vec3(0.2, 0.8, 0.3);
+            else if (vPos.y >= 0.0 && vPos.y <= 18.0 && length(vPos.xz) < 15.0) color = mix(vec3(1.0, 0.1, 0.4), vec3(1.0, 0.6, 0.8), vPos.y / 18.0);
+            else color = vec3(1.0, 0.9, 0.7);
+            gl_FragColor = vec4(color, pow(1.0 - (length(coord) * 2.0), 1.5) * 0.85 * uOpacity);
         }
     </script>
-
     <script id="starFragmentShader" type="x-shader/x-fragment">
         uniform float uOpacity; 
         void main() {
-            vec2 coord = gl_PointCoord - vec2(0.5);
-            if(length(coord) > 0.5) discard; 
-            // Color blanco/amarillo pálido para estrellas
-            vec3 color = vec3(1.0, 0.95, 0.85);
-            float strength = pow(1.0 - (length(coord) * 2.0), 1.5);
-            gl_FragColor = vec4(color, strength * uOpacity);
+            vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; 
+            gl_FragColor = vec4(vec3(1.0, 0.95, 0.85), pow(1.0 - (length(coord) * 2.0), 1.5) * uOpacity);
         }
     </script>
 
     <script>
-        // --- CONFIGURACIÓN BASE ---
-        const els = { overlay: document.getElementById('revelado-overlay') };
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x050005);
-        scene.fog = new THREE.FogExp2(0x050005, 0.005);
-        const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        
-        // --- CAMBIO AQUÍ ---
-        // Cámara más cerca para hacer el tulipán LIGERAMENTE MÁS GRANDE (antes 70)
-        camera.position.z = 55; 
-        camera.position.y = 5; 
+        // ==========================================
+        // SISTEMA DE CARGA OFFLINE (BOOTLOADER)
+        // ==========================================
+        const CDN_URL = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
+        const STORAGE_KEY = "threejs_engine_offline";
 
-        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
-        document.body.appendChild(renderer.domElement);
-
-        const clock = new THREE.Clock();
-        const tulipGroup = new THREE.Group(); scene.add(tulipGroup);
-
-        // --- SISTEMAS DE PARTÍCULAS ---
-
-        // 1. Materiales
-        const tulipMaterial = new THREE.ShaderMaterial({
-            vertexShader: document.getElementById('vertexShader').textContent,
-            fragmentShader: document.getElementById('fragmentShader').textContent,
-            uniforms: { uTime: { value: 0 }, uOpacity: { value: 1.0 } },
-            transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
-        });
-
-        const starMaterial = new THREE.ShaderMaterial({
-            vertexShader: document.getElementById('vertexShader').textContent, // Mismo VertexShader animado
-            fragmentShader: document.getElementById('starFragmentShader').textContent, // Fragment Shader blanco
-            uniforms: { uTime: { value: 0 }, uOpacity: { value: 0.6 } }, // Opacidad base de estrellas
-            transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
-        });
-
-        // 2. Geometría y Generación de Estrellas (ANIMADAS)
-        const starsGeometry = new THREE.BufferGeometry();
-        const starsPositions = []; const starSizes = []; const starPhases = [];
-        for(let i = 0; i < 2000; i++) {
-            starsPositions.push((Math.random()-0.5)*400, (Math.random()-0.5)*400, (Math.random()-0.5)*300-50);
-            starSizes.push(0.5 + Math.random() * 0.5); // Tamaños variados
-            starPhases.push(Math.random()); // Fases aleatorias para la animación
-        }
-        starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsPositions, 3));
-        starsGeometry.setAttribute('aSize', new THREE.Float32BufferAttribute(starSizes, 1));
-        starsGeometry.setAttribute('aPhase', new THREE.Float32BufferAttribute(starPhases, 1));
-        
-        scene.add(new THREE.Points(starsGeometry, starMaterial));
-
-        // 3. Geometría y Generación del Tulipán
-        const tulipGeometry = new THREE.BufferGeometry();
-        const tulipPos = []; const tulipSizes = []; const tulipPhases = []; 
-        for(let i = 0; i < 4000; i++) positionsAlongCylinder(tulipPos, tulipSizes, tulipPhases, 0.6, -25, 0, 0.4);
-        for(let i = 0; i < 28000; i++) positionsAlongTulipHead(tulipPos, tulipSizes, tulipPhases);
-        for(let i = 0; i < 3000; i++) {
-            let r = 20 + Math.random()*5; let theta = Math.random()*Math.PI*2;
-            tulipPos.push(r*Math.cos(theta), Math.random()*15, r*Math.sin(theta));
-            tulipSizes.push(0.3); tulipPhases.push(Math.random());
-        }
-        tulipGeometry.setAttribute('position', new THREE.Float32BufferAttribute(tulipPos, 3));
-        tulipGeometry.setAttribute('aSize', new THREE.Float32BufferAttribute(tulipSizes, 1));
-        tulipGeometry.setAttribute('aPhase', new THREE.Float32BufferAttribute(tulipPhases, 1)); 
-
-        tulipGroup.add(new THREE.Points(tulipGeometry, tulipMaterial));
-
-        // --- INTERACCIÓN Y LÓGICA DE PULSADO LARGO (10s) ---
-        // OFFSET ORIGINAL ELEVADO
-        const baseOffsetY = -2; tulipGroup.position.y = baseOffsetY;
-        const state = { targetX: 0, targetY: baseOffsetY, targetRotX: 0, currentX: 0, currentY: baseOffsetY, currentRotX: 0 };
-        
-        let isTouching = false;
-        let lastSignificantMoveTime = performance.now();
-        let startTouchX = 0, startTouchY = 0;
-        let isRevealed = false;
-
-        window.addEventListener('touchstart', (e) => {
-            if (isRevealed || e.touches.length > 1) return;
-            const touch = e.touches[0];
-            startTouchX = touch.clientX; startTouchY = touch.clientY;
-            updateTargets(touch);
-            isTouching = true;
-            lastSignificantMoveTime = performance.now(); // Reiniciar conteo al tocar
-        }, { passive: false });
-
-        window.addEventListener('touchmove', (e) => {
-            if (isRevealed || !isTouching) return;
-            const touch = e.touches[0];
-            updateTargets(touch);
-            
-            // Si el movimiento es significativo (más de un pequeño "glide"), reiniciamos el conteo
-            if (Math.hypot(touch.clientX - startTouchX, touch.clientY - startTouchY) > 40) {
-                lastSignificantMoveTime = performance.now();
-                // Actualizar origen para el próximo cálculo de glide
-                startTouchX = touch.clientX; startTouchY = touch.clientY;
+        function verificarDependencias() {
+            const motorGuardado = localStorage.getItem(STORAGE_KEY);
+            if (motorGuardado) {
+                // Si existe en memoria, inyectarlo y arrancar sin mostrar la pantalla de descarga
+                inyectarYArrancar(motorGuardado);
+            } else {
+                // Si no existe, mostrar la pantalla de descarga
+                document.getElementById('download-overlay').style.display = 'flex';
             }
-        }, { passive: false });
-
-        window.addEventListener('touchend', () => { isTouching = false; resetTargets(); });
-        window.addEventListener('touchcancel', () => { isTouching = false; resetTargets(); });
-
-        function updateTargets(touch) {
-            const nX = (touch.clientX / window.innerWidth) - 0.5;
-            const nY = (touch.clientY / window.innerHeight) - 0.5;
-            state.targetX = nX * 12; state.targetY = baseOffsetY + (-nY * 15); state.targetRotX = nY * 0.6;
-        }
-        function resetTargets() { state.targetX = 0; state.targetY = baseOffsetY; state.targetRotX = 0; }
-
-        // --- LÓGICA DE REVELADO (Fades en Shader) ---
-        function triggerRevelado() {
-            if (isRevealed) return;
-            isRevealed = true;
-            isTouching = false; // Parar seguimiento táctil
-            resetTargets(); // Regresar al centro
-            
-            // Fondo WebGL negro puro para el revelado
-            scene.background.set(0x000000); scene.fog.color.set(0x000000); scene.fog.density = 0.01;
-
-            // Mostrar Overlay HTML
-            els.overlay.classList.add('show');
         }
 
-        function cerrarRevelado() {
-            els.overlay.classList.remove('show');
-            setTimeout(() => { // Restaurar estado inicial
-                isRevealed = false;
-                scene.background.set(0x050005); scene.fog.color.set(0x050005); scene.fog.density = 0.005;
-                // Reiniciar opacidades uniformes
-                tulipMaterial.uniforms.uOpacity.value = 1.0;
-                starMaterial.uniforms.uOpacity.value = 0.6;
-            }, 2000);
-        }
+        async function descargarMotor() {
+            const statusDiv = document.getElementById('download-status');
+            const btn = document.getElementById('btn-descargar');
+            statusDiv.innerText = "Conectando y descargando...";
+            btn.style.display = 'none';
 
-        // --- CICLO DE ANIMACIÓN ---
-        function animate() {
-            requestAnimationFrame(animate);
-            const time = clock.getElapsedTime();
-            
-            // Actualizar tiempo en TODOS los materiales animados
-            tulipMaterial.uniforms.uTime.value = time;
-            starMaterial.uniforms.uTime.value = time; // ¡Ahora las estrellas se mueven!
+            try {
+                const response = await fetch(CDN_URL);
+                if (!response.ok) throw new Error("Error en la red");
+                const codigoFuente = await response.text();
+                
+                // Guardar en la memoria interna (Offline)
+                localStorage.setItem(STORAGE_KEY, codigoFuente);
+                
+                statusDiv.innerText = "¡Descarga completa! Iniciando...";
+                setTimeout(() => {
+                    document.getElementById('download-overlay').style.display = 'none';
+                    inyectarYArrancar(codigoFuente);
+                }, 1000);
 
-            // 1. Manejo del pulsado largo con glide (10 segundos)
-            if (!isRevealed && isTouching) {
-                if (performance.now() - lastSignificantMoveTime > 10000) {
-                    triggerRevelado();
-                }
+            } catch (error) {
+                statusDiv.innerText = "Error al descargar. Revisa tu internet e intenta de nuevo.";
+                btn.style.display = 'inline-block';
             }
-
-            // 2. Animaciones de revelado (Fades controlados por Three.js)
-            if (isRevealed) {
-                // Tulip desvanece (Fade Out)
-                tulipMaterial.uniforms.uOpacity.value = THREE.MathUtils.lerp(tulipMaterial.uniforms.uOpacity.value, 0.0, 0.01);
-                // Estrellas desvanecen (Fade Out)
-                starMaterial.uniforms.uOpacity.value = THREE.MathUtils.lerp(starMaterial.uniforms.uOpacity.value, 0.0, 0.01);
-            }
-
-            // 3. Interpolaciones táctiles suaves
-            state.currentX += (state.targetX - state.currentX) * 0.05;
-            state.currentY += (state.targetY - state.currentY) * 0.05;
-            state.currentRotX += (state.targetRotX - state.currentRotX) * 0.05;
-
-            // 4. Aplicar transformaciones al grupo del tulipán
-            tulipGroup.position.x = state.currentX;
-            tulipGroup.position.y = state.currentY + Math.sin(time) * 1.2; 
-            tulipGroup.rotation.x = state.currentRotX;
-
-            renderer.render(scene, camera);
-        }
-        
-        // Iniciar animación
-        animate();
-
-        // HELPERS GEOMETRÍA TULIPÁN
-        function positionsAlongCylinder(arr, sizes, phases, r, y1, y2, s) {
-            let t = Math.random(); let angle = Math.random()*Math.PI*2;
-            arr.push(r*Math.cos(angle), y1+(y2-y1)*t, r*Math.sin(angle));
-            sizes.push(s); phases.push(Math.random());
-        }
-        function positionsAlongTulipHead(arr, sizes, phases) {
-            let h = Math.random(); let theta = Math.random()*Math.PI*2;
-            let r = 9*Math.pow(h,0.4)*(1.1-h)*(1+0.15*Math.sin(3*theta));
-            arr.push(r*Math.cos(theta)+(Math.random()-0.5)*0.6, h*18+(Math.random()-0.5)*0.6, r*Math.sin(theta)+(Math.random()-0.5)*0.6);
-            sizes.push(0.5+Math.random()*0.8); phases.push(Math.random());
         }
 
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
+        function inyectarYArrancar(codigo) {
+            const script = document.createElement('script');
+            script.textContent = codigo;
+            document.body.appendChild(script);
+            // Una vez que el script de Three.js está en el body, iniciamos la app
+            iniciarAplicacion();
+        }
+
+        // Iniciar el chequeo apenas cargue el HTML
+        verificarDependencias();
+
+        // ==========================================
+        // LÓGICA PRINCIPAL DE LA APLICACIÓN (THREE.JS)
+        // ==========================================
+        let isRevealed = false; // Variable global para la UI
+
+        function iniciarAplicacion() {
+            const els = { overlay: document.getElementById('revelado-overlay') };
+            const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x050005);
+            scene.fog = new THREE.FogExp2(0x050005, 0.005);
+            const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
+            
+            camera.position.z = 55; 
+            camera.position.y = 5; 
+
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
-        });
+            renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+            document.body.appendChild(renderer.domElement);
+
+            const clock = new THREE.Clock();
+            const tulipGroup = new THREE.Group(); scene.add(tulipGroup);
+
+            const tulipMaterial = new THREE.ShaderMaterial({
+                vertexShader: document.getElementById('vertexShader').textContent,
+                fragmentShader: document.getElementById('fragmentShader').textContent,
+                uniforms: { uTime: { value: 0 }, uOpacity: { value: 1.0 } },
+                transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+            });
+
+            const starMaterial = new THREE.ShaderMaterial({
+                vertexShader: document.getElementById('vertexShader').textContent,
+                fragmentShader: document.getElementById('starFragmentShader').textContent, 
+                uniforms: { uTime: { value: 0 }, uOpacity: { value: 0.6 } }, 
+                transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
+            });
+
+            const starsGeometry = new THREE.BufferGeometry();
+            const starsPositions = []; const starSizes = []; const starPhases = [];
+            for(let i = 0; i < 2000; i++) {
+                starsPositions.push((Math.random()-0.5)*400, (Math.random()-0.5)*400, (Math.random()-0.5)*300-50);
+                starSizes.push(0.5 + Math.random() * 0.5); 
+                starPhases.push(Math.random()); 
+            }
+            starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsPositions, 3));
+            starsGeometry.setAttribute('aSize', new THREE.Float32BufferAttribute(starSizes, 1));
+            starsGeometry.setAttribute('aPhase', new THREE.Float32BufferAttribute(starPhases, 1));
+            scene.add(new THREE.Points(starsGeometry, starMaterial));
+
+            const tulipGeometry = new THREE.BufferGeometry();
+            const tulipPos = []; const tulipSizes = []; const tulipPhases = []; 
+            for(let i = 0; i < 4000; i++) positionsAlongCylinder(tulipPos, tulipSizes, tulipPhases, 0.6, -25, 0, 0.4);
+            for(let i = 0; i < 28000; i++) positionsAlongTulipHead(tulipPos, tulipSizes, tulipPhases);
+            for(let i = 0; i < 3000; i++) {
+                let r = 20 + Math.random()*5; let theta = Math.random()*Math.PI*2;
+                tulipPos.push(r*Math.cos(theta), Math.random()*15, r*Math.sin(theta));
+                tulipSizes.push(0.3); tulipPhases.push(Math.random());
+            }
+            tulipGeometry.setAttribute('position', new THREE.Float32BufferAttribute(tulipPos, 3));
+            tulipGeometry.setAttribute('aSize', new THREE.Float32BufferAttribute(tulipSizes, 1));
+            tulipGeometry.setAttribute('aPhase', new THREE.Float32BufferAttribute(tulipPhases, 1)); 
+            tulipGroup.add(new THREE.Points(tulipGeometry, tulipMaterial));
+
+            // --- TULIPÁN AÚN MÁS ARRIBA ---
+            const baseOffsetY = 3.5; 
+            tulipGroup.position.y = baseOffsetY;
+            const state = { targetX: 0, targetY: baseOffsetY, targetRotX: 0, currentX: 0, currentY: baseOffsetY, currentRotX: 0 };
+            
+            let isTouching = false;
+            let lastSignificantMoveTime = performance.now();
+            let startTouchX = 0, startTouchY = 0;
+
+            window.addEventListener('touchstart', (e) => {
+                if (isRevealed || e.touches.length > 1) return;
+                const touch = e.touches[0];
+                startTouchX = touch.clientX; startTouchY = touch.clientY;
+                updateTargets(touch);
+                isTouching = true;
+                lastSignificantMoveTime = performance.now(); 
+            }, { passive: false });
+
+            window.addEventListener('touchmove', (e) => {
+                if (isRevealed || !isTouching) return;
+                const touch = e.touches[0];
+                updateTargets(touch);
+                
+                if (Math.hypot(touch.clientX - startTouchX, touch.clientY - startTouchY) > 40) {
+                    lastSignificantMoveTime = performance.now();
+                    startTouchX = touch.clientX; startTouchY = touch.clientY;
+                }
+            }, { passive: false });
+
+            window.addEventListener('touchend', () => { isTouching = false; resetTargets(); });
+            window.addEventListener('touchcancel', () => { isTouching = false; resetTargets(); });
+
+            function updateTargets(touch) {
+                const nX = (touch.clientX / window.innerWidth) - 0.5;
+                const nY = (touch.clientY / window.innerHeight) - 0.5;
+                state.targetX = nX * 12; state.targetY = baseOffsetY + (-nY * 15); state.targetRotX = nY * 0.6;
+            }
+            function resetTargets() { state.targetX = 0; state.targetY = baseOffsetY; state.targetRotX = 0; }
+
+            function triggerRevelado() {
+                if (isRevealed) return;
+                isRevealed = true; isTouching = false; resetTargets();
+                scene.background.set(0x000000); scene.fog.color.set(0x000000); scene.fog.density = 0.01;
+                els.overlay.classList.add('show');
+            }
+
+            // Globalizamos cerrarRevelado para el botón HTML
+            window.cerrarRevelado = function() {
+                els.overlay.classList.remove('show');
+                setTimeout(() => {
+                    isRevealed = false;
+                    scene.background.set(0x050005); scene.fog.color.set(0x050005); scene.fog.density = 0.005;
+                    tulipMaterial.uniforms.uOpacity.value = 1.0;
+                    starMaterial.uniforms.uOpacity.value = 0.6;
+                }, 2000);
+            }
+
+            function animate() {
+                requestAnimationFrame(animate);
+                const time = clock.getElapsedTime();
+                
+                tulipMaterial.uniforms.uTime.value = time;
+                starMaterial.uniforms.uTime.value = time; 
+
+                if (!isRevealed && isTouching) {
+                    if (performance.now() - lastSignificantMoveTime > 10000) triggerRevelado();
+                }
+
+                if (isRevealed) {
+                    tulipMaterial.uniforms.uOpacity.value = THREE.MathUtils.lerp(tulipMaterial.uniforms.uOpacity.value, 0.0, 0.01);
+                    starMaterial.uniforms.uOpacity.value = THREE.MathUtils.lerp(starMaterial.uniforms.uOpacity.value, 0.0, 0.01);
+                }
+
+                state.currentX += (state.targetX - state.currentX) * 0.05;
+                state.currentY += (state.targetY - state.currentY) * 0.05;
+                state.currentRotX += (state.targetRotX - state.currentRotX) * 0.05;
+
+                tulipGroup.position.x = state.currentX;
+                tulipGroup.position.y = state.currentY + Math.sin(time) * 1.2; 
+                tulipGroup.rotation.x = state.currentRotX;
+
+                renderer.render(scene, camera);
+            }
+            animate();
+
+            function positionsAlongCylinder(arr, sizes, phases, r, y1, y2, s) {
+                let t = Math.random(); let angle = Math.random()*Math.PI*2;
+                arr.push(r*Math.cos(angle), y1+(y2-y1)*t, r*Math.sin(angle));
+                sizes.push(s); phases.push(Math.random());
+            }
+            function positionsAlongTulipHead(arr, sizes, phases) {
+                let h = Math.random(); let theta = Math.random()*Math.PI*2;
+                let r = 9*Math.pow(h,0.4)*(1.1-h)*(1+0.15*Math.sin(3*theta));
+                arr.push(r*Math.cos(theta)+(Math.random()-0.5)*0.6, h*18+(Math.random()-0.5)*0.6, r*Math.sin(theta)+(Math.random()-0.5)*0.6);
+                sizes.push(0.5+Math.random()*0.8); phases.push(Math.random());
+            }
+
+            window.addEventListener('resize', () => {
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
+            });
+        }
     </script>
 </body>
 </html>
