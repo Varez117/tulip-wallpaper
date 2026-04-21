@@ -33,7 +33,6 @@
         }
         #btn-descargar:active { background: rgba(255,150,200,0.3); }
         
-        /* Botón de emergencia si se corrompe la memoria */
         #btn-reset {
             margin-top: 20px; padding: 8px 20px; background: transparent; border: 1px solid #ff4444; color: #ff4444;
             border-radius: 20px; font-size: 0.8rem; cursor: pointer; display: none;
@@ -105,12 +104,13 @@
         uniform float uOpacity; 
         void main() {
             vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; 
+            // Color blanco/amarillo pálido para estrellas
             gl_FragColor = vec4(vec3(1.0, 0.95, 0.85), pow(1.0 - (length(coord) * 2.0), 1.5) * uOpacity);
         }
     </script>
 
     <script>
-        // Capturar cualquier error inesperado y mostrarlo en pantalla
+        // Capturar errores
         window.onerror = function(msg, url, line) {
             document.getElementById('debug-log').innerHTML += "Error: " + msg + "<br>";
         };
@@ -121,7 +121,6 @@
         const CDN_URL = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
         const STORAGE_KEY = "threejs_engine_offline";
 
-        // Funciones seguras para LocalStorage (evitan cuelgues si está bloqueado)
         function getSafeStorage() {
             try { return localStorage.getItem(STORAGE_KEY); } 
             catch(e) { document.getElementById('debug-log').innerHTML += "Storage denegado.<br>"; return null; }
@@ -153,15 +152,12 @@
                 const response = await fetch(CDN_URL);
                 if (!response.ok) throw new Error("Error de red");
                 const codigoFuente = await response.text();
-                
-                setSafeStorage(codigoFuente); // Intento seguro de guardar
-                
+                setSafeStorage(codigoFuente); 
                 statusDiv.innerText = "¡Descarga completa! Iniciando...";
                 setTimeout(() => {
                     document.getElementById('download-overlay').style.display = 'none';
                     inyectarYArrancar(codigoFuente);
                 }, 1000);
-
             } catch (error) {
                 statusDiv.innerText = "Error al descargar. Revisa tu internet.";
                 btn.style.display = 'inline-block';
@@ -173,22 +169,19 @@
                 const script = document.createElement('script');
                 script.textContent = codigo;
                 document.body.appendChild(script);
-                
-                // Dar 100ms para asegurar que el móvil asimile la librería
                 setTimeout(() => {
                     if (typeof THREE !== 'undefined') {
-                        document.getElementById('debug-log').innerHTML = ""; // Limpiar log si hubo éxito
+                        document.getElementById('debug-log').innerHTML = ""; // Limpiar log
                         iniciarAplicacion();
                     } else {
                         throw new Error("Motor corrupto o no inicializado");
                     }
                 }, 100);
-
             } catch (e) {
-                removeSafeStorage(); // Borramos la basura
+                removeSafeStorage(); // Borramos basura
                 document.getElementById('debug-log').innerHTML += "Fallo crítico al inyectar.<br>";
                 document.getElementById('download-overlay').style.display = 'flex';
-                document.getElementById('btn-reset').style.display = 'inline-block'; // Botón de auxilio
+                document.getElementById('btn-reset').style.display = 'inline-block'; // Botón auxilio
             }
         }
 
@@ -197,11 +190,11 @@
             location.reload();
         }
 
-        // Iniciar el chequeo apenas cargue
+        // Iniciar chequeo
         verificarDependencias();
 
         // ==========================================
-        // LÓGICA PRINCIPAL DE LA APLICACIÓN (THREE.JS)
+        // LÓGICA PRINCIPAL (THREE.JS)
         // ==========================================
         let isRevealed = false;
 
@@ -212,6 +205,7 @@
             scene.fog = new THREE.FogExp2(0x050005, 0.005);
             const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
             
+            // TAMAÑO GRANDE
             camera.position.z = 55; 
             camera.position.y = 5; 
 
@@ -233,15 +227,25 @@
             const starMaterial = new THREE.ShaderMaterial({
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('starFragmentShader').textContent, 
-                uniforms: { uTime: { value: 0 }, uOpacity: { value: 0.6 } }, 
+                // AUMENTO DE OPACIDAD BASE DE ESTRELLAS (0.7)
+                uniforms: { uTime: { value: 0 }, uOpacity: { value: 0.7 } }, 
                 transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
             });
 
+            // --- AMBIENTE ENRIQUECIDO Y LLENO ---
             const starsGeometry = new THREE.BufferGeometry();
             const starsPositions = []; const starSizes = []; const starPhases = [];
-            for(let i = 0; i < 2000; i++) {
-                starsPositions.push((Math.random()-0.5)*400, (Math.random()-0.5)*400, (Math.random()-0.5)*300-50);
-                starSizes.push(0.5 + Math.random() * 0.5); 
+            // TRIPLICAR EL NÚMERO DE ESTRELLAS (6000)
+            for(let i = 0; i < 6000; i++) {
+                // Posicionamiento en volumen amplio, pero más centrado
+                starsPositions.push((Math.random()-0.5)*400, (Math.random()-0.5)*400, (Math.random()-0.5)*250-50);
+                
+                // --- TAMAÑO VARIAS Y GRANDES ---
+                // No solo pixeles pequeños; hay gran variedad de tamaños para crear profundidad.
+                if(Math.random() > 0.95) starSizes.push(3.0 + Math.random() * 0.5); // 5% big spots
+                else if(Math.random() > 0.8) starSizes.push(2.0 + Math.random() * 0.5); // 15% med-big spots
+                else starSizes.push(1.0 + Math.random() * 0.5); // 80% generally bigger
+
                 starPhases.push(Math.random()); 
             }
             starsGeometry.setAttribute('position', new THREE.Float32BufferAttribute(starsPositions, 3));
@@ -253,17 +257,20 @@
             const tulipPos = []; const tulipSizes = []; const tulipPhases = []; 
             for(let i = 0; i < 4000; i++) positionsAlongCylinder(tulipPos, tulipSizes, tulipPhases, 0.6, -25, 0, 0.4);
             for(let i = 0; i < 28000; i++) positionsAlongTulipHead(tulipPos, tulipSizes, tulipPhases);
-            for(let i = 0; i < 3000; i++) {
+            
+            // --- HALO DEL TULIPÁN DUPLICADO (6000) ---
+            for(let i = 0; i < 6000; i++) {
                 let r = 20 + Math.random()*5; let theta = Math.random()*Math.PI*2;
                 tulipPos.push(r*Math.cos(theta), Math.random()*15, r*Math.sin(theta));
-                tulipSizes.push(0.3); tulipPhases.push(Math.random());
+                // Variedad de tamaño en el halo táctil
+                tulipSizes.push(0.2 + Math.random()*0.3); tulipPhases.push(Math.random());
             }
             tulipGeometry.setAttribute('position', new THREE.Float32BufferAttribute(tulipPos, 3));
             tulipGeometry.setAttribute('aSize', new THREE.Float32BufferAttribute(tulipSizes, 1));
             tulipGeometry.setAttribute('aPhase', new THREE.Float32BufferAttribute(tulipPhases, 1)); 
             tulipGroup.add(new THREE.Points(tulipGeometry, tulipMaterial));
 
-            // --- TULIPÁN SUBIDO AÚN MÁS (4.2) ---
+            // --- POSICIÓN SUBIDA (4.2) ---
             const baseOffsetY = 4.2; 
             tulipGroup.position.y = baseOffsetY;
             const state = { targetX: 0, targetY: baseOffsetY, targetRotX: 0, currentX: 0, currentY: baseOffsetY, currentRotX: 0 };
@@ -315,14 +322,13 @@
                     isRevealed = false;
                     scene.background.set(0x050005); scene.fog.color.set(0x050005); scene.fog.density = 0.005;
                     tulipMaterial.uniforms.uOpacity.value = 1.0;
-                    starMaterial.uniforms.uOpacity.value = 0.6;
+                    starMaterial.uniforms.uOpacity.value = 0.7; // Restaurar opacidad base
                 }, 2000);
             }
 
             function animate() {
                 requestAnimationFrame(animate);
                 const time = clock.getElapsedTime();
-                
                 tulipMaterial.uniforms.uTime.value = time;
                 starMaterial.uniforms.uTime.value = time; 
 
