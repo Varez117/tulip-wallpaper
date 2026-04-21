@@ -81,7 +81,12 @@
         attribute float aSize; attribute float aPhase; varying vec3 vPos; uniform float uTime; uniform float uOpacity; 
         void main() {
             vec3 pos = position;
-            vec3 beeMotion = vec3(sin(uTime * 2.0 + aPhase * 10.0), cos(uTime * 2.5 + aPhase * 12.0), sin(uTime * 1.8 + aPhase * 8.0)) * aSize * 0.5;
+            // Movimiento orgánico sutil basado en tiempo y fase única
+            vec3 beeMotion = vec3(
+                sin(uTime * 1.5 + aPhase * 10.0),
+                cos(uTime * 1.8 + aPhase * 12.0),
+                sin(uTime * 1.3 + aPhase * 8.0)
+            ) * aSize * 0.5;
             pos += beeMotion;
             vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
             gl_Position = projectionMatrix * mvPosition;
@@ -89,6 +94,30 @@
             vPos = position; 
         }
     </script>
+
+    <script id="luciernagaVertexShader" type="x-shader/x-vertex">
+        attribute float aSize; attribute float aPhase; varying vec3 vPos; varying float vPhase; uniform float uTime; uniform float uOpacity; 
+        void main() {
+            vec3 pos = position;
+            vPhase = aPhase; // Pasamos la fase al fragment shader
+
+            // --- MOVIMIENTO DE LUCIÉRNAGAS VARIADO Y NO LINEAL ---
+            // Usamos fases desfasadas y frecuencias mixtas para evitar patrones repetitivos
+            float tPhase = uTime * (1.0 + aPhase * 1.5) + aPhase * 50.0;
+            vec3 luciernagaMotion = vec3(
+                (sin(tPhase * 2.0) + 0.5 * cos(tPhase * 4.3)) * aSize * 1.2,
+                (cos(tPhase * 2.5) + 0.5 * sin(tPhase * 3.7)) * aSize * 1.2,
+                (sin(tPhase * 1.8) + 0.5 * cos(tPhase * 5.1)) * aSize * 1.2
+            );
+            
+            pos += luciernagaMotion;
+            vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
+            gl_Position = projectionMatrix * mvPosition;
+            gl_PointSize = (5.0 * aSize) * (50.0 / -mvPosition.z); // Ligeramente más grandes
+            vPos = position; 
+        }
+    </script>
+
     <script id="fragmentShader" type="x-shader/x-fragment">
         varying vec3 vPos; uniform float uOpacity; 
         void main() {
@@ -100,33 +129,40 @@
             gl_FragColor = vec4(color, pow(1.0 - (length(coord) * 2.0), 1.5) * 0.85 * uOpacity);
         }
     </script>
-    <script id="starFragmentShader" type="x-shader/x-fragment">
-        uniform float uOpacity; 
+
+    <script id="luciernagaFragmentShader" type="x-shader/x-fragment">
+        varying vec3 vPos; varying float vPhase; uniform float uOpacity; uniform float uTime;
         void main() {
             vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; 
-            gl_FragColor = vec4(vec3(1.0, 0.95, 0.85), pow(1.0 - (length(coord) * 2.0), 1.5) * uOpacity);
+            
+            // --- LÓGICA DE PARPADEO INDIVIDUAL (Subiendo y bajando brillo) ---
+            // Usamos la fase única de cada partícula para desfasar el parpadeo
+            float individualFlicker = sin(uTime * (1.5 + vPhase * 3.0) + vPhase * 100.0);
+            individualFlicker = (individualFlicker + 1.0) / 2.0; // Normalizar a 0-1
+            individualFlicker = pow(individualFlicker, 3.0); // Agudizar el pico del parpadeo (más tiempo oscuro, parpadeo rápido)
+
+            // Color luciérnaga (amarillo-dorado cálido)
+            vec3 luciernagaColor = vec3(1.0, 0.9, 0.3);
+            
+            gl_FragColor = vec4(luciernagaColor, pow(1.0 - (length(coord) * 2.0), 1.5) * uOpacity * individualFlicker);
         }
     </script>
 
     <script>
-        // Capturar errores
         window.onerror = function(msg, url, line) {
             document.getElementById('debug-log').innerHTML += "Error: " + msg + "<br>";
         };
 
-        // ==========================================
-        // SISTEMA DE CARGA OFFLINE SEGURO
-        // ==========================================
         const CDN_URL = "https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js";
         const STORAGE_KEY = "threejs_engine_offline";
 
         function getSafeStorage() {
             try { return localStorage.getItem(STORAGE_KEY); } 
-            catch(e) { document.getElementById('debug-log').innerHTML += "Storage denegado.<br>"; return null; }
+            catch(e) { return null; }
         }
         function setSafeStorage(val) {
             try { localStorage.setItem(STORAGE_KEY, val); } 
-            catch(e) { document.getElementById('debug-log').innerHTML += "No se pudo guardar offline.<br>"; }
+            catch(e) { }
         }
         function removeSafeStorage() {
             try { localStorage.removeItem(STORAGE_KEY); } catch(e) {}
@@ -144,21 +180,20 @@
         async function descargarMotor() {
             const statusDiv = document.getElementById('download-status');
             const btn = document.getElementById('btn-descargar');
-            statusDiv.innerText = "Conectando y descargando...";
+            statusDiv.innerText = "Conectando...";
             btn.style.display = 'none';
 
             try {
                 const response = await fetch(CDN_URL);
-                if (!response.ok) throw new Error("Error de red");
                 const codigoFuente = await response.text();
                 setSafeStorage(codigoFuente); 
-                statusDiv.innerText = "¡Descarga completa! Iniciando...";
+                statusDiv.innerText = "¡Listo! Iniciando...";
                 setTimeout(() => {
                     document.getElementById('download-overlay').style.display = 'none';
                     inyectarYArrancar(codigoFuente);
                 }, 1000);
             } catch (error) {
-                statusDiv.innerText = "Error al descargar. Revisa tu internet.";
+                statusDiv.innerText = "Error. Revisa tu internet.";
                 btn.style.display = 'inline-block';
             }
         }
@@ -172,13 +207,10 @@
                     if (typeof THREE !== 'undefined') {
                         document.getElementById('debug-log').innerHTML = ""; 
                         iniciarAplicacion();
-                    } else {
-                        throw new Error("Motor corrupto o no inicializado");
-                    }
+                    } else { throw new Error("Motor corrupto"); }
                 }, 100);
             } catch (e) {
                 removeSafeStorage(); 
-                document.getElementById('debug-log').innerHTML += "Fallo crítico al inyectar.<br>";
                 document.getElementById('download-overlay').style.display = 'flex';
                 document.getElementById('btn-reset').style.display = 'inline-block'; 
             }
@@ -203,7 +235,7 @@
             scene.fog = new THREE.FogExp2(0x050005, 0.005);
             const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
             
-            // CÁMARA CERCANA
+            // CÁMARA CERCANA MANTENIDA
             camera.position.z = 55; 
             camera.position.y = 5; 
 
@@ -215,6 +247,7 @@
             const clock = new THREE.Clock();
             const tulipGroup = new THREE.Group(); scene.add(tulipGroup);
 
+            // Shaders para Tulipán
             const tulipMaterial = new THREE.ShaderMaterial({
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('fragmentShader').textContent,
@@ -222,27 +255,29 @@
                 transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
             });
 
+            // --- NUEVOS SHADERS PARA LUCIÉRNAGAS ---
             const starMaterial = new THREE.ShaderMaterial({
-                vertexShader: document.getElementById('vertexShader').textContent,
-                fragmentShader: document.getElementById('starFragmentShader').textContent, 
+                vertexShader: document.getElementById('luciernagaVertexShader').textContent,
+                fragmentShader: document.getElementById('luciernagaFragmentShader').textContent, 
+                // Misma uniform compartida para parpadeo y opacidad
                 uniforms: { uTime: { value: 0 }, uOpacity: { value: 0.7 } }, 
                 transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
             });
 
-            // --- AMBIENTE OPTIMIZADO (CONCENTRADO Y MENOR CANTIDAD) ---
+            // --- AMBIENTE OPTIMIZADO CON LUCIÉRNAGAS ---
             const starsGeometry = new THREE.BufferGeometry();
             const starsPositions = []; const starSizes = []; const starPhases = [];
             
-            // Reducido de 6000 a 2000 para salvar batería
+            // Mantenemos 2000 partículas para salvar batería, pero las concentramos
             for(let i = 0; i < 2000; i++) {
-                // Generadas solo en el campo de visión directo de la cámara (área mucho más ajustada)
+                // Generadas solo en el campo de visión directo de la cámara (área muy ajustada)
                 starsPositions.push(
                     (Math.random() - 0.5) * 120,  // Ancho contenido
                     (Math.random() - 0.5) * 160,  // Alto contenido
                     (Math.random() - 0.5) * 100   // Profundidad contenida
                 );
                 
-                // Mantenemos la variedad de tamaños para que no se vea vacío
+                // Variedad de tamaños
                 if(Math.random() > 0.95) starSizes.push(3.0 + Math.random() * 0.5); 
                 else if(Math.random() > 0.8) starSizes.push(2.0 + Math.random() * 0.5); 
                 else starSizes.push(1.0 + Math.random() * 0.5); 
@@ -254,19 +289,16 @@
             starsGeometry.setAttribute('aPhase', new THREE.Float32BufferAttribute(starPhases, 1));
             scene.add(new THREE.Points(starsGeometry, starMaterial));
 
+            // --- TULIPÁN SIN HALO ---
             const tulipGeometry = new THREE.BufferGeometry();
             const tulipPos = []; const tulipSizes = []; const tulipPhases = []; 
+            // Stem
             for(let i = 0; i < 4000; i++) positionsAlongCylinder(tulipPos, tulipSizes, tulipPhases, 0.6, -25, 0, 0.4);
+            // Flower Head
             for(let i = 0; i < 28000; i++) positionsAlongTulipHead(tulipPos, tulipSizes, tulipPhases);
             
-            // --- HALO DEL TULIPÁN OPTIMIZADO ---
-            // Reducido de 6000 a 3000 partículas
-            for(let i = 0; i < 3000; i++) {
-                let r = 15 + Math.random()*10; // Radio más apretado alrededor de la flor
-                let theta = Math.random()*Math.PI*2;
-                tulipPos.push(r*Math.cos(theta), Math.random()*15, r*Math.sin(theta));
-                tulipSizes.push(0.3 + Math.random()*0.3); tulipPhases.push(Math.random());
-            }
+            // SE ELIMINÓ EL BUCLE DEL HALO AQUÍ
+
             tulipGeometry.setAttribute('position', new THREE.Float32BufferAttribute(tulipPos, 3));
             tulipGeometry.setAttribute('aSize', new THREE.Float32BufferAttribute(tulipSizes, 1));
             tulipGeometry.setAttribute('aPhase', new THREE.Float32BufferAttribute(tulipPhases, 1)); 
