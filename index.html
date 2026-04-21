@@ -95,20 +95,28 @@
     </script>
 
     <script id="luciernagaVertexShader" type="x-shader/x-vertex">
-        attribute float aSize; attribute float aPhase; varying vec3 vPos; varying float vPhase; uniform float uTime; uniform float uOpacity; 
+        attribute float aSize; attribute float aPhase; varying vec3 vPos; varying float vPhase; 
+        uniform float uTime; uniform float uOpacity; uniform float uSpeed; uniform float uSizeBase;
+        
         void main() {
             vec3 pos = position;
             vPhase = aPhase; 
-            float tPhase = uTime * (1.0 + aPhase * 1.5) + aPhase * 50.0;
+            
+            // Aplicamos uSpeed para ralentizar/acelerar el tiempo
+            float tPhase = (uTime * uSpeed) * (1.0 + aPhase * 1.5) + aPhase * 50.0;
+            
             vec3 luciernagaMotion = vec3(
                 (sin(tPhase * 2.0) + 0.5 * cos(tPhase * 4.3)) * aSize * 1.2,
                 (cos(tPhase * 2.5) + 0.5 * sin(tPhase * 3.7)) * aSize * 1.2,
                 (sin(tPhase * 1.8) + 0.5 * cos(tPhase * 5.1)) * aSize * 1.2
             );
             pos += luciernagaMotion;
+            
             vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
             gl_Position = projectionMatrix * mvPosition;
-            gl_PointSize = (5.0 * aSize) * (50.0 / -mvPosition.z); 
+            
+            // Aplicamos uSizeBase para controlar el tamaño general
+            gl_PointSize = (uSizeBase * aSize) * (50.0 / -mvPosition.z); 
             vPos = position; 
         }
     </script>
@@ -126,12 +134,15 @@
     </script>
 
     <script id="luciernagaFragmentShader" type="x-shader/x-fragment">
-        varying vec3 vPos; varying float vPhase; uniform float uOpacity; uniform float uTime;
+        varying vec3 vPos; varying float vPhase; uniform float uOpacity; uniform float uTime; uniform float uSpeed;
         void main() {
             vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; 
-            float individualFlicker = sin(uTime * (1.5 + vPhase * 3.0) + vPhase * 100.0);
+            
+            // El parpadeo también es afectado por uSpeed para verse más orgánico
+            float individualFlicker = sin((uTime * uSpeed) * (1.5 + vPhase * 3.0) + vPhase * 100.0);
             individualFlicker = (individualFlicker + 1.0) / 2.0; 
             individualFlicker = pow(individualFlicker, 3.0); 
+            
             vec3 luciernagaColor = vec3(1.0, 0.9, 0.3);
             gl_FragColor = vec4(luciernagaColor, pow(1.0 - (length(coord) * 2.0), 1.5) * uOpacity * individualFlicker);
         }
@@ -222,20 +233,22 @@
 
         function iniciarAplicacion() {
             // ---------------------------------------------------------
-            // CONFIGURACIÓN DEL USUARIO (CANTIDADES Y ÁREA DE RENDER)
+            // CONFIGURACIÓN DEL USUARIO
             // ---------------------------------------------------------
             const CONFIG = {
-                // Control de Cantidad de Partículas (Reducir para salvar batería)
-                CANT_LUCIERNAGAS: 2000, // Partículas flotantes del ambiente
-                CANT_TALLO: 4000,       // Partículas verdes de la base
-                CANT_FLOR: 28000,       // Partículas rosas de la cabeza
+                // Control de Cantidad de Partículas
+                CANT_LUCIERNAGAS: 2000, 
+                CANT_TALLO: 4000,       
+                CANT_FLOR: 28000,       
                 
                 // Control del Área de Renderizado de Luciérnagas
-                // Ajusta estos valores para limitar dónde nacen las partículas.
-                // Valores más pequeños concentran las partículas en el centro (ideal para móviles en vertical).
-                AREA_ANCHO: 60,       // Rango en el eje X (Izquierda a Derecha). Antes 120.
-                AREA_ALTO: 160,       // Rango en el eje Y (Abajo a Arriba).
-                AREA_PROFUNDIDAD: 100 // Rango en el eje Z (Fondo a Frente).
+                AREA_ANCHO: 60,       
+                AREA_ALTO: 160,       
+                AREA_PROFUNDIDAD: 100,
+                
+                // Control de Apariencia de Luciérnagas
+                LUCIERNAGAS_TAMANO: 12.0,    // Mayor valor = más grandes (antes fijo en 5.0)
+                LUCIERNAGAS_VELOCIDAD: 0.3   // 1.0 es normal, valores menores las hacen más lentas y suaves
             };
             // ---------------------------------------------------------
 
@@ -264,10 +277,16 @@
                 transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
             });
 
+            // Shader de Luciérnagas actualizado para recibir las configuraciones
             const starMaterial = new THREE.ShaderMaterial({
                 vertexShader: document.getElementById('luciernagaVertexShader').textContent,
                 fragmentShader: document.getElementById('luciernagaFragmentShader').textContent, 
-                uniforms: { uTime: { value: 0 }, uOpacity: { value: 0.7 } }, 
+                uniforms: { 
+                    uTime: { value: 0 }, 
+                    uOpacity: { value: 0.7 },
+                    uSpeed: { value: CONFIG.LUCIERNAGAS_VELOCIDAD },
+                    uSizeBase: { value: CONFIG.LUCIERNAGAS_TAMANO }
+                }, 
                 transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
             });
 
@@ -276,7 +295,6 @@
             const starsPositions = []; const starSizes = []; const starPhases = [];
             
             for(let i = 0; i < CONFIG.CANT_LUCIERNAGAS; i++) {
-                // Aplicamos las variables del usuario para el área de renderizado
                 starsPositions.push(
                     (Math.random() - 0.5) * CONFIG.AREA_ANCHO,
                     (Math.random() - 0.5) * CONFIG.AREA_ALTO,
@@ -298,7 +316,6 @@
             const tulipGeometry = new THREE.BufferGeometry();
             const tulipPos = []; const tulipSizes = []; const tulipPhases = []; 
             
-            // Aplicamos las variables del usuario para la cantidad de flor
             for(let i = 0; i < CONFIG.CANT_TALLO; i++) positionsAlongCylinder(tulipPos, tulipSizes, tulipPhases, 0.6, -25, 0, 0.4);
             for(let i = 0; i < CONFIG.CANT_FLOR; i++) positionsAlongTulipHead(tulipPos, tulipSizes, tulipPhases);
 
