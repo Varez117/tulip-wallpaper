@@ -104,7 +104,6 @@
         uniform float uOpacity; 
         void main() {
             vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; 
-            // Color blanco/amarillo pálido para estrellas
             gl_FragColor = vec4(vec3(1.0, 0.95, 0.85), pow(1.0 - (length(coord) * 2.0), 1.5) * uOpacity);
         }
     </script>
@@ -171,17 +170,17 @@
                 document.body.appendChild(script);
                 setTimeout(() => {
                     if (typeof THREE !== 'undefined') {
-                        document.getElementById('debug-log').innerHTML = ""; // Limpiar log
+                        document.getElementById('debug-log').innerHTML = ""; 
                         iniciarAplicacion();
                     } else {
                         throw new Error("Motor corrupto o no inicializado");
                     }
                 }, 100);
             } catch (e) {
-                removeSafeStorage(); // Borramos basura
+                removeSafeStorage(); 
                 document.getElementById('debug-log').innerHTML += "Fallo crítico al inyectar.<br>";
                 document.getElementById('download-overlay').style.display = 'flex';
-                document.getElementById('btn-reset').style.display = 'inline-block'; // Botón auxilio
+                document.getElementById('btn-reset').style.display = 'inline-block'; 
             }
         }
 
@@ -190,7 +189,6 @@
             location.reload();
         }
 
-        // Iniciar chequeo
         verificarDependencias();
 
         // ==========================================
@@ -205,11 +203,11 @@
             scene.fog = new THREE.FogExp2(0x050005, 0.005);
             const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
             
-            // TAMAÑO GRANDE
+            // CÁMARA CERCANA
             camera.position.z = 55; 
             camera.position.y = 5; 
 
-            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+            const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "low-power" });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
             document.body.appendChild(renderer.domElement);
@@ -227,24 +225,27 @@
             const starMaterial = new THREE.ShaderMaterial({
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('starFragmentShader').textContent, 
-                // AUMENTO DE OPACIDAD BASE DE ESTRELLAS (0.7)
                 uniforms: { uTime: { value: 0 }, uOpacity: { value: 0.7 } }, 
                 transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
             });
 
-            // --- AMBIENTE ENRIQUECIDO Y LLENO ---
+            // --- AMBIENTE OPTIMIZADO (CONCENTRADO Y MENOR CANTIDAD) ---
             const starsGeometry = new THREE.BufferGeometry();
             const starsPositions = []; const starSizes = []; const starPhases = [];
-            // TRIPLICAR EL NÚMERO DE ESTRELLAS (6000)
-            for(let i = 0; i < 6000; i++) {
-                // Posicionamiento en volumen amplio, pero más centrado
-                starsPositions.push((Math.random()-0.5)*400, (Math.random()-0.5)*400, (Math.random()-0.5)*250-50);
+            
+            // Reducido de 6000 a 2000 para salvar batería
+            for(let i = 0; i < 2000; i++) {
+                // Generadas solo en el campo de visión directo de la cámara (área mucho más ajustada)
+                starsPositions.push(
+                    (Math.random() - 0.5) * 120,  // Ancho contenido
+                    (Math.random() - 0.5) * 160,  // Alto contenido
+                    (Math.random() - 0.5) * 100   // Profundidad contenida
+                );
                 
-                // --- TAMAÑO VARIAS Y GRANDES ---
-                // No solo pixeles pequeños; hay gran variedad de tamaños para crear profundidad.
-                if(Math.random() > 0.95) starSizes.push(3.0 + Math.random() * 0.5); // 5% big spots
-                else if(Math.random() > 0.8) starSizes.push(2.0 + Math.random() * 0.5); // 15% med-big spots
-                else starSizes.push(1.0 + Math.random() * 0.5); // 80% generally bigger
+                // Mantenemos la variedad de tamaños para que no se vea vacío
+                if(Math.random() > 0.95) starSizes.push(3.0 + Math.random() * 0.5); 
+                else if(Math.random() > 0.8) starSizes.push(2.0 + Math.random() * 0.5); 
+                else starSizes.push(1.0 + Math.random() * 0.5); 
 
                 starPhases.push(Math.random()); 
             }
@@ -258,19 +259,20 @@
             for(let i = 0; i < 4000; i++) positionsAlongCylinder(tulipPos, tulipSizes, tulipPhases, 0.6, -25, 0, 0.4);
             for(let i = 0; i < 28000; i++) positionsAlongTulipHead(tulipPos, tulipSizes, tulipPhases);
             
-            // --- HALO DEL TULIPÁN DUPLICADO (6000) ---
-            for(let i = 0; i < 6000; i++) {
-                let r = 20 + Math.random()*5; let theta = Math.random()*Math.PI*2;
+            // --- HALO DEL TULIPÁN OPTIMIZADO ---
+            // Reducido de 6000 a 3000 partículas
+            for(let i = 0; i < 3000; i++) {
+                let r = 15 + Math.random()*10; // Radio más apretado alrededor de la flor
+                let theta = Math.random()*Math.PI*2;
                 tulipPos.push(r*Math.cos(theta), Math.random()*15, r*Math.sin(theta));
-                // Variedad de tamaño en el halo táctil
-                tulipSizes.push(0.2 + Math.random()*0.3); tulipPhases.push(Math.random());
+                tulipSizes.push(0.3 + Math.random()*0.3); tulipPhases.push(Math.random());
             }
             tulipGeometry.setAttribute('position', new THREE.Float32BufferAttribute(tulipPos, 3));
             tulipGeometry.setAttribute('aSize', new THREE.Float32BufferAttribute(tulipSizes, 1));
             tulipGeometry.setAttribute('aPhase', new THREE.Float32BufferAttribute(tulipPhases, 1)); 
             tulipGroup.add(new THREE.Points(tulipGeometry, tulipMaterial));
 
-            // --- POSICIÓN SUBIDA (4.2) ---
+            // --- POSICIÓN SUBIDA MANTENIDA (4.2) ---
             const baseOffsetY = 4.2; 
             tulipGroup.position.y = baseOffsetY;
             const state = { targetX: 0, targetY: baseOffsetY, targetRotX: 0, currentX: 0, currentY: baseOffsetY, currentRotX: 0 };
@@ -322,7 +324,7 @@
                     isRevealed = false;
                     scene.background.set(0x050005); scene.fog.color.set(0x050005); scene.fog.density = 0.005;
                     tulipMaterial.uniforms.uOpacity.value = 1.0;
-                    starMaterial.uniforms.uOpacity.value = 0.7; // Restaurar opacidad base
+                    starMaterial.uniforms.uOpacity.value = 0.7; 
                 }, 2000);
             }
 
