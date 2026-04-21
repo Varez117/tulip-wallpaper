@@ -6,25 +6,42 @@
     <title>Esencia para Ingrid</title>
     <style>
         body { margin: 0; overflow: hidden; background-color: #050005; touch-action: none; font-family: 'Consolas', monospace; color: #fff; }
-        canvas { display: block; width: 100vw; height: 100vh; }
         
+        /* El lienzo WebGL donde está el tulipán y el texto */
+        canvas { 
+            display: block; width: 100vw; height: 100vh; 
+            position: absolute; top: 0; left: 0; 
+            z-index: 10; /* Capa inicial detrás de la UI HTML estándar */
+            transition: z-index 0.1s step-end; /* Salto instantáneo al frente cuando sea necesario */
+        }
+        canvas.on-top {
+            z-index: 200; /* Salta al frente sobre la imagen HTML */
+        }
+
+        /* Contenedor de la imagen HTML (Regalo) */
         #revelado-overlay {
             position: absolute; top: 0; left: 0; width: 100%; height: 100%;
-            background: #000; /* Fondo negro puro */
+            background: #000; /* Fondo negro para que resalten las partículas sobre la escena */
             display: flex; flex-direction: column; align-items: center; justify-content: flex-end; /* Imagen abajo */
-            z-index: 100; opacity: 0; pointer-events: none; transition: opacity 2s ease-out;
-            padding-bottom: 5vh; /* Espacio abajo */
+            z-index: 100; /* Capa intermedia */
+            opacity: 0; pointer-events: none; transition: opacity 2s ease-out;
+            padding-bottom: 5vh; /* Espacio para el botón */
         }
         #revelado-overlay.show { opacity: 1; pointer-events: auto; }
+        
+        /* La imagen de tu repositorio */
         #imagen-local {
             max-width: 80%; max-height: 50vh; /* Mitad inferior */
             border: 1px solid rgba(255, 150, 200, 0.2); border-radius: 8px;
             object-fit: contain; box-shadow: 0 0 30px rgba(255,150,200,0.1);
+            position: relative; z-index: 1; /* Dentro de su contenedor */
         }
+        
         #close-btn {
-            margin-top: 30px; padding: 10px 25px;
+            margin-top: 20px; padding: 10px 25px;
             background: transparent; border: 1px solid rgba(255,150,200,0.5); color: #ff96c8;
             border-radius: 20px; font-size: 0.8rem; letter-spacing: 1px; cursor: pointer;
+            position: relative; z-index: 300; /* Botón clickable sobre el canvas */
         }
         
         #loading-text {
@@ -97,7 +114,8 @@
         scene.background = new THREE.Color(0x050005);
         scene.fog = new THREE.FogExp2(0x050005, 0.005);
         const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
-        camera.position.z = 80; camera.position.y = 8; // Más alejada para el texto
+        // TAMAÑO Y POSICIÓN ORIGINAL DEL TULIPÁN
+        camera.position.z = 70; camera.position.y = 5; 
 
         const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -110,15 +128,17 @@
         const textGroup = new THREE.Group(); scene.add(textGroup);
 
         // --- SISTEMA DE PARTÍCULAS (Material Compartido) ---
-        const baseMaterial = new THREE.ShaderMaterial({
+        // Material para el Tulipán (visible al inicio)
+        const tulipMaterial = new THREE.ShaderMaterial({
             vertexShader: document.getElementById('vertexShader').textContent,
             fragmentShader: document.getElementById('fragmentShader').textContent,
-            uniforms: { uTime: { value: 0 }, uOpacity: { value: 1.0 } }, // Visibles al inicio
+            uniforms: { uTime: { value: 0 }, uOpacity: { value: 1.0 } },
             transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
         });
         
-        const textMaterial = baseMaterial.clone(); 
-        textMaterial.uniforms.uOpacity.value = 0.0; // Texto oculto al inicio
+        // Material clonado para el Texto (oculto al inicio)
+        const textMaterial = tulipMaterial.clone(); 
+        textMaterial.uniforms.uOpacity.value = 0.0; 
 
         // 1. Estrellas
         const starsGeometry = new THREE.BufferGeometry();
@@ -131,15 +151,8 @@
         // 2. Geometría del Tulipán
         const tulipGeometry = new THREE.BufferGeometry();
         const tulipPos = []; const tulipSizes = []; const tulipPhases = []; 
-        
-        // Tallo y Cabeza
-        for(let i = 0; i < 4000; i++) {
-            positionsAlongCylinder(tulipPos, tulipSizes, tulipPhases, 0.6, -25, 0, 0.4);
-        }
-        for(let i = 0; i < 28000; i++) {
-            positionsAlongTulipHead(tulipPos, tulipSizes, tulipPhases);
-        }
-        // Halo sutil alrededor
+        for(let i = 0; i < 4000; i++) positionsAlongCylinder(tulipPos, tulipSizes, tulipPhases, 0.6, -25, 0, 0.4);
+        for(let i = 0; i < 28000; i++) positionsAlongTulipHead(tulipPos, tulipSizes, tulipPhases);
         for(let i = 0; i < 3000; i++) {
             let r = 20 + Math.random()*5; let theta = Math.random()*Math.PI*2;
             tulipPos.push(r*Math.cos(theta), Math.random()*15, r*Math.sin(theta));
@@ -149,28 +162,25 @@
         tulipGeometry.setAttribute('aSize', new THREE.Float32BufferAttribute(tulipSizes, 1));
         tulipGeometry.setAttribute('aPhase', new THREE.Float32BufferAttribute(tulipPhases, 1)); 
 
-        const tulipPoints = new THREE.Points(tulipGeometry, baseMaterial);
-        tulipGroup.add(tulipPoints);
+        tulipGroup.add(new THREE.Points(tulipGeometry, tulipMaterial));
 
-        // --- CARGA DE FUENTES Y GENERACIÓN DE TEXTO ---
+        // --- CARGA DE FUENTES Y GENERACIÓN DE TEXTO CON PARTÍCULAS ---
         const fontLoader = new THREE.FontLoader();
-        // Cargamos una fuente helvetiker desde CDN. Requiere conexión.
+        // Cargamos una fuente helvetiker desde CDN. Requiere conexión la primera vez.
         fontLoader.load('https://raw.githubusercontent.com/mrdoob/three.js/master/examples/fonts/helvetiker_regular.typeface.json', (font) => {
             const textString = "Te amo Ingrid";
             const textGeometry = new THREE.TextGeometry(textString, {
-                font: font, size: 4.5, height: 1, curveSegments: 6,
-                bevelEnabled: false
+                font: font, size: 4.5, height: 1, curveSegments: 6, bevelEnabled: false
             });
-            textGeometry.center(); // Centrar en su propio origen
+            textGeometry.center(); // Centrar geometría sólida
 
-            // Convertir la geometría de texto sólida en puntos
+            // Convertir geometría de texto sólida en nube de puntos
             const finalGeometry = new THREE.BufferGeometry();
-            const positions = textGeometry.attributes.position.array;
+            const posArray = textGeometry.attributes.position.array;
             const textP = []; const textS = []; const textPh = [];
-            
-            for(let i = 0; i < positions.length; i += 3) {
+            for(let i = 0; i < posArray.length; i += 3) {
                 if(Math.random() > 0.4) { // Densidad de partículas
-                    textP.push(positions[i] + (Math.random()-0.5)*0.2, positions[i+1] + (Math.random()-0.5)*0.2, positions[i+2]);
+                    textP.push(posArray[i] + (Math.random()-0.5)*0.2, posArray[i+1] + (Math.random()-0.5)*0.2, posArray[i+2]);
                     textS.push(0.6 + Math.random()*0.4); textPh.push(Math.random());
                 }
             }
@@ -188,7 +198,8 @@
         });
 
         // --- INTERACCIÓN Y LÓGICA DE PULSADO LARGO CON DESLIZAMIENTO ---
-        const baseOffsetY = -5; tulipGroup.position.y = baseOffsetY; textGroup.position.y = baseOffsetY;
+        // OFFSET ORIGINAL ELEVADO
+        const baseOffsetY = -2; tulipGroup.position.y = baseOffsetY; textGroup.position.y = baseOffsetY;
         const state = { targetX: 0, targetY: baseOffsetY, targetRotX: 0, currentX: 0, currentY: baseOffsetY, currentRotX: 0 };
         
         let isTouching = false;
@@ -202,7 +213,7 @@
             startTouchX = touch.clientX; startTouchY = touch.clientY;
             updateTargets(touch);
             isTouching = true;
-            lastSignificantMoveTime = performance.now(); // Reiniciar conteo
+            lastSignificantMoveTime = performance.now(); // Reiniciar conteo al tocar
         }, { passive: false });
 
         window.addEventListener('touchmove', (e) => {
@@ -211,7 +222,7 @@
             updateTargets(touch);
             
             // Si el movimiento es significativo (más de un pequeño "glide"), reiniciamos el conteo
-            if (Math.hypot(touch.clientX - startTouchX, touch.clientY - startTouchY) > 30) {
+            if (Math.hypot(touch.clientX - startTouchX, touch.clientY - startTouchY) > 40) {
                 lastSignificantMoveTime = performance.now();
                 // Actualizar origen para el próximo cálculo de glide
                 startTouchX = touch.clientX; startTouchY = touch.clientY;
@@ -228,18 +239,22 @@
         }
         function resetTargets() { state.targetX = 0; state.targetY = baseOffsetY; state.targetRotX = 0; }
 
-        // --- LÓGICA DE REVELADO (Fades en Shader) ---
+        // --- LÓGICA DE REVELADO (Fades en Shader y Capas) ---
         function triggerRevelado() {
             if (isRevealed) return;
             isRevealed = true;
             isTouching = false; // Parar seguimiento táctil
             resetTargets(); // Regresar al centro
             
-            // Secuencia visual WebGL
+            // Secuencia visual
             starField.visible = false;
-            scene.fog.color.set(0x000000); scene.background.set(0x000000); scene.fog.density = 0.01;
+            // Salto del Canvas al frente sobre la imagen HTML
+            renderer.domElement.classList.add('on-top'); 
+            
+            // Fondo WebGL negro puro para el revelado
+            scene.background.set(0x000000); scene.fog.color.set(0x000000); scene.fog.density = 0.01;
 
-            // Mostrar Overlay HTML
+            // Mostrar Overlay HTML (Imagen detrás del canvas)
             els.overlay.classList.add('show');
         }
 
@@ -248,9 +263,10 @@
             setTimeout(() => { // Restaurar estado inicial
                 isRevealed = false;
                 starField.visible = true;
+                renderer.domElement.classList.remove('on-top'); // Canvas vuelve atrás
                 scene.background.set(0x050005); scene.fog.color.set(0x050005); scene.fog.density = 0.005;
                 // Reiniciar opacidades
-                baseMaterial.uniforms.uOpacity.value = 1.0;
+                tulipMaterial.uniforms.uOpacity.value = 1.0;
                 textMaterial.uniforms.uOpacity.value = 0.0;
             }, 2000);
         }
@@ -259,8 +275,8 @@
         function animate() {
             requestAnimationFrame(animate);
             const time = clock.getElapsedTime();
-            baseMaterial.uniforms.uTime.value = time;
-            textMaterial.uniforms.uTime.value = time; // Mismo tiempo
+            tulipMaterial.uniforms.uTime.value = time;
+            textMaterial.uniforms.uTime.value = time; // Comparten tiempo
 
             // 1. Manejo del pulsado largo con glide
             if (!isRevealed && isTouching) {
@@ -270,15 +286,15 @@
                 }
             }
 
-            // 2. Animaciones de revelado (Fades)
+            // 2. Animaciones de revelado (Fades controlados por Three.js)
             if (isRevealed) {
                 // Tulip desvanece (Fade Out)
-                baseMaterial.uniforms.uOpacity.value = THREE.MathUtils.lerp(baseMaterial.uniforms.uOpacity.value, 0.0, 0.01);
+                tulipMaterial.uniforms.uOpacity.value = THREE.MathUtils.lerp(tulipMaterial.uniforms.uOpacity.value, 0.0, 0.01);
                 // Texto aparece (Fade In)
                 textMaterial.uniforms.uOpacity.value = THREE.MathUtils.lerp(textMaterial.uniforms.uOpacity.value, 1.0, 0.02);
             }
 
-            // 3. Interpolaciones táctiles
+            // 3. Interpolaciones táctiles suaves
             state.currentX += (state.targetX - state.currentX) * 0.05;
             state.currentY += (state.targetY - state.currentY) * 0.05;
             state.currentRotX += (state.targetRotX - state.currentRotX) * 0.05;
@@ -288,13 +304,13 @@
             tulipGroup.position.y = state.currentY + Math.sin(time) * 1.2; 
             tulipGroup.rotation.x = state.currentRotX;
 
-            textGroup.position.copy(tulipGroup.position); // Siguen al tulipán
+            textGroup.position.copy(tulipGroup.position); // Siguen la misma física
             textGroup.rotation.copy(tulipGroup.rotation);
 
             renderer.render(scene, camera);
         }
 
-        // --- HELPERS GEOMETRÍA TULIPÁN (Sin cambios) ---
+        // HELPERS GEOMETRÍA TULIPÁN
         function positionsAlongCylinder(arr, sizes, phases, r, y1, y2, s) {
             let t = Math.random(); let angle = Math.random()*Math.PI*2;
             arr.push(r*Math.cos(angle), y1+(y2-y1)*t, r*Math.sin(angle));
