@@ -81,7 +81,6 @@
         attribute float aSize; attribute float aPhase; varying vec3 vPos; uniform float uTime; uniform float uOpacity; 
         void main() {
             vec3 pos = position;
-            // Movimiento orgánico sutil basado en tiempo y fase única
             vec3 beeMotion = vec3(
                 sin(uTime * 1.5 + aPhase * 10.0),
                 cos(uTime * 1.8 + aPhase * 12.0),
@@ -99,21 +98,17 @@
         attribute float aSize; attribute float aPhase; varying vec3 vPos; varying float vPhase; uniform float uTime; uniform float uOpacity; 
         void main() {
             vec3 pos = position;
-            vPhase = aPhase; // Pasamos la fase al fragment shader
-
-            // --- MOVIMIENTO DE LUCIÉRNAGAS VARIADO Y NO LINEAL ---
-            // Usamos fases desfasadas y frecuencias mixtas para evitar patrones repetitivos
+            vPhase = aPhase; 
             float tPhase = uTime * (1.0 + aPhase * 1.5) + aPhase * 50.0;
             vec3 luciernagaMotion = vec3(
                 (sin(tPhase * 2.0) + 0.5 * cos(tPhase * 4.3)) * aSize * 1.2,
                 (cos(tPhase * 2.5) + 0.5 * sin(tPhase * 3.7)) * aSize * 1.2,
                 (sin(tPhase * 1.8) + 0.5 * cos(tPhase * 5.1)) * aSize * 1.2
             );
-            
             pos += luciernagaMotion;
             vec4 mvPosition = modelViewMatrix * vec4(pos, 1.0);
             gl_Position = projectionMatrix * mvPosition;
-            gl_PointSize = (5.0 * aSize) * (50.0 / -mvPosition.z); // Ligeramente más grandes
+            gl_PointSize = (5.0 * aSize) * (50.0 / -mvPosition.z); 
             vPos = position; 
         }
     </script>
@@ -134,21 +129,18 @@
         varying vec3 vPos; varying float vPhase; uniform float uOpacity; uniform float uTime;
         void main() {
             vec2 coord = gl_PointCoord - vec2(0.5); if(length(coord) > 0.5) discard; 
-            
-            // --- LÓGICA DE PARPADEO INDIVIDUAL (Subiendo y bajando brillo) ---
-            // Usamos la fase única de cada partícula para desfasar el parpadeo
             float individualFlicker = sin(uTime * (1.5 + vPhase * 3.0) + vPhase * 100.0);
-            individualFlicker = (individualFlicker + 1.0) / 2.0; // Normalizar a 0-1
-            individualFlicker = pow(individualFlicker, 3.0); // Agudizar el pico del parpadeo (más tiempo oscuro, parpadeo rápido)
-
-            // Color luciérnaga (amarillo-dorado cálido)
+            individualFlicker = (individualFlicker + 1.0) / 2.0; 
+            individualFlicker = pow(individualFlicker, 3.0); 
             vec3 luciernagaColor = vec3(1.0, 0.9, 0.3);
-            
             gl_FragColor = vec4(luciernagaColor, pow(1.0 - (length(coord) * 2.0), 1.5) * uOpacity * individualFlicker);
         }
     </script>
 
     <script>
+        // ==========================================
+        // SISTEMA DE CARGA OFFLINE SEGURO
+        // ==========================================
         window.onerror = function(msg, url, line) {
             document.getElementById('debug-log').innerHTML += "Error: " + msg + "<br>";
         };
@@ -229,13 +221,30 @@
         let isRevealed = false;
 
         function iniciarAplicacion() {
+            // ---------------------------------------------------------
+            // CONFIGURACIÓN DEL USUARIO (CANTIDADES Y ÁREA DE RENDER)
+            // ---------------------------------------------------------
+            const CONFIG = {
+                // Control de Cantidad de Partículas (Reducir para salvar batería)
+                CANT_LUCIERNAGAS: 2000, // Partículas flotantes del ambiente
+                CANT_TALLO: 4000,       // Partículas verdes de la base
+                CANT_FLOR: 28000,       // Partículas rosas de la cabeza
+                
+                // Control del Área de Renderizado de Luciérnagas
+                // Ajusta estos valores para limitar dónde nacen las partículas.
+                // Valores más pequeños concentran las partículas en el centro (ideal para móviles en vertical).
+                AREA_ANCHO: 60,       // Rango en el eje X (Izquierda a Derecha). Antes 120.
+                AREA_ALTO: 160,       // Rango en el eje Y (Abajo a Arriba).
+                AREA_PROFUNDIDAD: 100 // Rango en el eje Z (Fondo a Frente).
+            };
+            // ---------------------------------------------------------
+
             const els = { overlay: document.getElementById('revelado-overlay') };
             const scene = new THREE.Scene();
             scene.background = new THREE.Color(0x050005);
             scene.fog = new THREE.FogExp2(0x050005, 0.005);
             const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 1000);
             
-            // CÁMARA CERCANA MANTENIDA
             camera.position.z = 55; 
             camera.position.y = 5; 
 
@@ -247,7 +256,7 @@
             const clock = new THREE.Clock();
             const tulipGroup = new THREE.Group(); scene.add(tulipGroup);
 
-            // Shaders para Tulipán
+            // Shaders
             const tulipMaterial = new THREE.ShaderMaterial({
                 vertexShader: document.getElementById('vertexShader').textContent,
                 fragmentShader: document.getElementById('fragmentShader').textContent,
@@ -255,29 +264,25 @@
                 transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
             });
 
-            // --- NUEVOS SHADERS PARA LUCIÉRNAGAS ---
             const starMaterial = new THREE.ShaderMaterial({
                 vertexShader: document.getElementById('luciernagaVertexShader').textContent,
                 fragmentShader: document.getElementById('luciernagaFragmentShader').textContent, 
-                // Misma uniform compartida para parpadeo y opacidad
                 uniforms: { uTime: { value: 0 }, uOpacity: { value: 0.7 } }, 
                 transparent: true, depthWrite: false, blending: THREE.AdditiveBlending
             });
 
-            // --- AMBIENTE OPTIMIZADO CON LUCIÉRNAGAS ---
+            // --- AMBIENTE (LUCIÉRNAGAS) ---
             const starsGeometry = new THREE.BufferGeometry();
             const starsPositions = []; const starSizes = []; const starPhases = [];
             
-            // Mantenemos 2000 partículas para salvar batería, pero las concentramos
-            for(let i = 0; i < 2000; i++) {
-                // Generadas solo en el campo de visión directo de la cámara (área muy ajustada)
+            for(let i = 0; i < CONFIG.CANT_LUCIERNAGAS; i++) {
+                // Aplicamos las variables del usuario para el área de renderizado
                 starsPositions.push(
-                    (Math.random() - 0.5) * 120,  // Ancho contenido
-                    (Math.random() - 0.5) * 160,  // Alto contenido
-                    (Math.random() - 0.5) * 100   // Profundidad contenida
+                    (Math.random() - 0.5) * CONFIG.AREA_ANCHO,
+                    (Math.random() - 0.5) * CONFIG.AREA_ALTO,
+                    (Math.random() - 0.5) * CONFIG.AREA_PROFUNDIDAD
                 );
                 
-                // Variedad de tamaños
                 if(Math.random() > 0.95) starSizes.push(3.0 + Math.random() * 0.5); 
                 else if(Math.random() > 0.8) starSizes.push(2.0 + Math.random() * 0.5); 
                 else starSizes.push(1.0 + Math.random() * 0.5); 
@@ -289,22 +294,20 @@
             starsGeometry.setAttribute('aPhase', new THREE.Float32BufferAttribute(starPhases, 1));
             scene.add(new THREE.Points(starsGeometry, starMaterial));
 
-            // --- TULIPÁN SIN HALO ---
+            // --- TULIPÁN ---
             const tulipGeometry = new THREE.BufferGeometry();
             const tulipPos = []; const tulipSizes = []; const tulipPhases = []; 
-            // Stem
-            for(let i = 0; i < 4000; i++) positionsAlongCylinder(tulipPos, tulipSizes, tulipPhases, 0.6, -25, 0, 0.4);
-            // Flower Head
-            for(let i = 0; i < 28000; i++) positionsAlongTulipHead(tulipPos, tulipSizes, tulipPhases);
             
-            // SE ELIMINÓ EL BUCLE DEL HALO AQUÍ
+            // Aplicamos las variables del usuario para la cantidad de flor
+            for(let i = 0; i < CONFIG.CANT_TALLO; i++) positionsAlongCylinder(tulipPos, tulipSizes, tulipPhases, 0.6, -25, 0, 0.4);
+            for(let i = 0; i < CONFIG.CANT_FLOR; i++) positionsAlongTulipHead(tulipPos, tulipSizes, tulipPhases);
 
             tulipGeometry.setAttribute('position', new THREE.Float32BufferAttribute(tulipPos, 3));
             tulipGeometry.setAttribute('aSize', new THREE.Float32BufferAttribute(tulipSizes, 1));
             tulipGeometry.setAttribute('aPhase', new THREE.Float32BufferAttribute(tulipPhases, 1)); 
             tulipGroup.add(new THREE.Points(tulipGeometry, tulipMaterial));
 
-            // --- POSICIÓN SUBIDA MANTENIDA (4.2) ---
+            // --- POSICIÓN ---
             const baseOffsetY = 4.2; 
             tulipGroup.position.y = baseOffsetY;
             const state = { targetX: 0, targetY: baseOffsetY, targetRotX: 0, currentX: 0, currentY: baseOffsetY, currentRotX: 0 };
